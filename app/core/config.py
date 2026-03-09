@@ -8,9 +8,9 @@ class Settings(BaseSettings):
     # MongoDB
     mongodb_uri: str = "mongodb://localhost:27017"
     mongodb_db_name: str = "tool_registry"
-    # Timeouts in ms (increase if Atlas/slow network; default 60s)
-    mongodb_server_selection_timeout_ms: int = 60_000
-    mongodb_connect_timeout_ms: int = 60_000
+    # Timeouts in ms (5s default for fail-fast; set higher for Atlas/slow network)
+    mongodb_server_selection_timeout_ms: int = 5_000
+    mongodb_connect_timeout_ms: int = 5_000
     # If True, app starts even when ensure_index fails (e.g. MongoDB unreachable); indexes created on first use
     mongodb_defer_index_creation: bool = False
 
@@ -39,6 +39,19 @@ class Settings(BaseSettings):
 
     # Resilience: tool execution timeout
     tool_execution_timeout_seconds: float = 30.0
+
+    # Resilience: rate limiting (API requests per minute per IP)
+    rate_limit_per_minute: int = 60
+
+    # Resilience: bulkhead (max concurrent executions per tool)
+    bulkhead_max_concurrent_per_tool: int = 10
+
+    # Resilience: Redis connect timeout (seconds) and retry attempts on startup
+    redis_connect_timeout_seconds: float = 5.0
+    redis_connect_retry_attempts: int = 3
+
+    # API request timeout (seconds) - cap DB operations so docs/UI don't hang indefinitely
+    api_request_timeout_seconds: float = 15.0
 
 
 settings = Settings()

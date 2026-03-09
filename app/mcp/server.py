@@ -33,12 +33,21 @@ def _tool_to_mcp(t: Any) -> Tool:
     )
 
 
-def create_mcp_app(registry: ToolRegistry, mcp_path: str = "/mcp") -> Starlette:
-    """Build a Starlette app that serves MCP over Streamable HTTP. All registered tools are mounted (listed and callable)."""
+def create_mcp_app(
+    registry: ToolRegistry,
+    mcp_path: str = "/mcp",
+) -> tuple[Starlette, StreamableHTTPSessionManager]:
+    """
+    Build a Starlette app and session manager for MCP over Streamable HTTP.
+
+    Returns (asgi_app, session_manager). The caller must run session_manager.run()
+    in their lifespan before mounting the app, because mounted sub-apps do not
+    receive lifespan events—only the parent app does.
+    """
     server = MCPServer("Tool Registry Hub")
 
     @server.list_tools()
-    async def list_tools(_: Any) -> ListToolsResult:
+    async def list_tools() -> ListToolsResult:
         try:
             tools = await registry.list_all(skip=0, limit=MCP_LIST_TOOLS_LIMIT)
             mcp_tools = [_tool_to_mcp(t) for t in tools]
@@ -91,12 +100,8 @@ def create_mcp_app(registry: ToolRegistry, mcp_path: str = "/mcp") -> Starlette:
 
     asgi_app = StreamableHTTPASGIApp(session_manager)
 
-    async def lifespan(app: Starlette):
-        async with session_manager.run():
-            yield
-
-    return Starlette(
+    mcp_starlette = Starlette(
         debug=False,
-        routes=[Route("/", endpoint=asgi_app)],
-        lifespan=lifespan,
+        routes=[Route("/", endpoint=asgi_app, methods=["GET", "POST", "OPTIONS"])],
     )
+    return mcp_starlette, session_manager

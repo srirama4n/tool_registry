@@ -44,6 +44,10 @@ Environment variables (optional; defaults shown):
 | `CIRCUIT_BREAKER_FAILURE_THRESHOLD` | `5` | Failures before opening circuit per tool |
 | `CIRCUIT_BREAKER_RECOVERY_SECONDS` | `60` | Seconds before half-open (retry one call) |
 | `TOOL_EXECUTION_TIMEOUT_SECONDS` | `30` | HTTP timeout for tool endpoint calls |
+| `RATE_LIMIT_PER_MINUTE` | `60` | API requests per minute per IP (returns 429 when exceeded) |
+| `BULKHEAD_MAX_CONCURRENT_PER_TOOL` | `10` | Max concurrent executions per tool |
+| `REDIS_CONNECT_TIMEOUT_SECONDS` | `5` | Redis connect timeout |
+| `REDIS_CONNECT_RETRY_ATTEMPTS` | `3` | Retries for Redis connect on startup |
 | `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) |
 | `HOST` | `0.0.0.0` | Bind host |
 | `PORT` | `8000` | Bind port |
@@ -66,16 +70,28 @@ cd /path/to/tool_registry
 .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
+- **UI**: http://localhost:8000/ (tool management interface)  
 - **API docs**: http://localhost:8000/docs  
-- **Root**: http://localhost:8000/  
 - **MCP**: http://localhost:8000/mcp (Streamable HTTP)  
 - **Health (liveness)**: http://localhost:8000/health  
 - **Health (readiness)**: http://localhost:8000/health/ready  
+
+The UI is built and served from the same server. On first run, `run.sh` builds the UI automatically if `tool-registry-ui/dist` doesn't exist. To run the UI in dev mode with hot reload:
+
+```bash
+cd tool-registry-ui
+npm install && npm run dev
+```
+
+The dev UI runs at http://localhost:5173 and proxies API requests to the backend. See `tool-registry-ui/README.md` for details.  
 
 ## Resilience
 
 - **Retry with exponential backoff**: Transient failures (connection/timeout, MongoDB/Redis/tool HTTP) are retried (configurable attempts and backoff).
 - **Circuit breaker**: Per-tool execution; after N consecutive failures the circuit opens and calls fail fast until recovery_seconds, then one probe is allowed.
+- **Rate limiting**: API requests are throttled per IP (configurable requests/minute); returns 429 when exceeded.
+- **Bulkhead**: Max concurrent executions per tool (configurable); prevents one tool from exhausting resources.
+- **Redis connect retry**: Retries Redis connection on startup with timeout and configurable attempts.
 - **Health checks**: `/health` (liveness, always 200); `/health/ready` (readiness, 503 if MongoDB unreachable).
 
 ## REST API

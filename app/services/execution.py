@@ -1,4 +1,5 @@
 """Execute a registered tool by calling its service endpoint (baseUrl + arguments)."""
+import asyncio
 import logging
 from typing import Any
 
@@ -15,6 +16,19 @@ _circuit_breaker = CircuitBreaker(
     failure_threshold=settings.circuit_breaker_failure_threshold,
     recovery_seconds=settings.circuit_breaker_recovery_seconds,
 )
+
+# Bulkhead: per-tool semaphores to limit concurrent executions
+_bulkhead_limit = max(1, settings.bulkhead_max_concurrent_per_tool)
+_semaphores: dict[str, asyncio.Semaphore] = {}
+_semaphores_lock = asyncio.Lock()
+
+
+async def _get_semaphore(tool_name: str) -> asyncio.Semaphore:
+    """Get or create semaphore for tool (async-safe)."""
+    async with _semaphores_lock:
+        if tool_name not in _semaphores:
+            _semaphores[tool_name] = asyncio.Semaphore(_bulkhead_limit)
+        return _semaphores[tool_name]
 
 
 @make_async_retry(
@@ -37,7 +51,7 @@ async def _execute_tool_request(url: str, tool_name: str, arguments: dict[str, A
 async def execute_tool(tool: Tool, arguments: dict[str, Any]) -> str:
     """
     Invoke the tool's endpoint (baseUrl) with the given arguments.
-    Uses retry (exponential backoff) and circuit breaker per tool.
+    Uses retry (exponential backoff), circuit breaker, and bulkhead (concurrency limit) per tool.
     Returns the response body as string; caller can wrap in MCP content.
     """
     base_url = tool.endpoints.baseUrl.rstrip("/")
@@ -45,8 +59,12 @@ async def execute_tool(tool: Tool, arguments: dict[str, Any]) -> str:
     invoke_path = custom.get("invoke") or custom.get("execute") or "/"
     url = f"{base_url}{invoke_path}" if invoke_path.startswith("/") else f"{base_url}/{invoke_path}"
     logger.debug("Executing tool name=%s url=%s", tool.name, url)
+    sem = await _get_semaphore(tool.name)
     try:
-        result = await _circuit_breaker.call(tool.name, lambda: _execute_tool_request(url, tool.name, arguments))
+        async with sem:
+            result = await _circuit_breaker.call(
+                tool.name, lambda: _execute_tool_request(url, tool.name, arguments)
+            )
         logger.info("Tool executed successfully: name=%s", tool.name)
         return result
     except CircuitBreakerOpenError as e:

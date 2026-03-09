@@ -1,6 +1,7 @@
 """Tool registry: MongoDB-backed CRUD with Redis cache for list (read-intensive)."""
 import json
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -187,6 +188,14 @@ class ToolRegistry:
             logger.exception("list_all failed: %s", e)
             raise
 
+    def _bump_version(self, version: str) -> str:
+        """Bump patch version (e.g. 1.0.0 -> 1.0.1)."""
+        m = re.match(r"^(\d+)\.(\d+)\.(\d+)(.*)$", str(version or "1.0.0").strip())
+        if m:
+            major, minor, patch, suffix = m.groups()
+            return f"{major}.{minor}.{int(patch) + 1}{suffix or ''}"
+        return "1.0.1"
+
     async def update(self, name: str, tool: Tool) -> Tool | None:
         await self._ensure_index_once()
         try:
@@ -196,6 +205,9 @@ class ToolRegistry:
                 return None
             now = datetime.now(timezone.utc)
             doc = tool.model_dump(mode="json", by_alias=False)
+            # Auto-bump version on update
+            existing_version = existing.get("version", "1.0.0")
+            doc["version"] = self._bump_version(existing_version)
             doc["metadata"] = doc.get("metadata") or {}
             doc["metadata"]["updated"] = now
             if existing.get("metadata"):

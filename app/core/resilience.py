@@ -29,8 +29,8 @@ RETRY_EXCEPTIONS = (
     httpx.ConnectTimeout,
 )
 
-# MongoDB transient errors
-DB_RETRY_EXCEPTIONS = (ServerSelectionTimeoutError, NetworkTimeout, TimeoutError, ConnectionError, OSError)
+# MongoDB transient errors (retry only NetworkTimeout - ServerSelectionTimeoutError means DB is down, don't retry)
+DB_RETRY_EXCEPTIONS = (NetworkTimeout, TimeoutError, ConnectionError, OSError)
 
 
 def make_async_retry(

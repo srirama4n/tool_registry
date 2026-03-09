@@ -90,12 +90,42 @@ class RateLimitConfig(BaseModel):
     quotaType: str | None = None  # "fixed" | "sliding_window"
 
 
+# ---- SSL/TLS Security ----
+class SSLConfig(BaseModel):
+    verifyCert: bool = True
+    certPath: str | None = None
+    keyPath: str | None = None
+    caPath: str | None = None
+    tlsVersion: str | None = None  # "TLSv1.2", "TLSv1.3"
+
+
+# ---- OAuth Security ----
+class OAuthConfig(BaseModel):
+    tokenUrl: str | None = None
+    authorizationUrl: str | None = None
+    clientId: str | None = None
+    grantType: str | None = None  # "client_credentials", "authorization_code"
+    scopes: list[str] = Field(default_factory=list)
+
+
+# ---- JWT Security ----
+class JWTConfig(BaseModel):
+    issuer: str | None = None
+    audience: str | None = None
+    jwksUrl: str | None = None
+    algorithm: str | None = None  # "RS256", "HS256"
+    headerName: str | None = None  # "Authorization" or custom
+
+
 # ---- SecurityConfig ----
 class SecurityConfig(BaseModel):
-    authType: str | None = None  # "API_KEY" | "OAuth2" | "None"
+    authType: str | None = None  # "API_KEY" | "OAuth2" | "JWT" | "None"
     requiredScopes: list[str] = Field(default_factory=list)
     allowedOrigins: list[str] = Field(default_factory=list)
     rateLimit: RateLimitConfig | None = None
+    ssl: SSLConfig | None = None
+    oauth: OAuthConfig | None = None
+    jwt: JWTConfig | None = None
 
 
 # ---- ServiceEndpoints ----
